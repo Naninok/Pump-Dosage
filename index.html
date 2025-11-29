@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chemical Dosing Calculator</title>
+
+<style>
+  body {
+    font-family: "Segoe UI", sans-serif;
+    padding: 20px;
+    background: #f0f2f5;
+  }
+
+  .card {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 16px;
+    max-width: 420px;
+    margin: auto;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+  }
+
+  h2 {
+    margin-top: 0;
+    margin-bottom: 16px;
+    text-align: center;
+    color: #333;
+  }
+
+  .input-row {
+    margin-bottom: 14px;
+  }
+
+  .label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #444;
+  }
+
+  .inline-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  input {
+    flex: 1;
+    padding: 12px;
+    border-radius: 10px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+  }
+
+  select.unit {
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid #ccc;
+    background: #fff;
+    font-size: 15px;
+  }
+
+  button {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(90deg,#e53935,#d32f2f);
+    color: white;
+    border: none;
+    border-radius: 12px;
+    font-size: 17px;
+    margin-top: 10px;
+  }
+
+  .result {
+    margin-top: 18px;
+    font-size: 17px;
+    font-weight: bold;
+    color: #222;
+    line-height: 1.6;
+  }
+</style>
+</head>
+
+<body>
+<div class="card">
+  <h2>คำนวณอัตราป้อนสารเคมี</h2>
+
+  <!-- ppm -->
+  <div class="input-row">
+    <div class="label">Dosage ที่ต้องการ (ppm)</div>
+    <input type="number" id="ppm" oninput="calc()" placeholder="เช่น 2.4" />
+  </div>
+
+  <!-- Flow -->
+  <div class="input-row">
+    <div class="label">อัตราการไหลน้ำ</div>
+    <div class="inline-box">
+      <input type="number" id="flow" oninput="calc()" placeholder="เช่น 220" />
+      <select id="flowUnit" class="unit" onchange="calc()">
+        <option value="Lmin">L/min</option>
+        <option value="m3hr">m³/hr</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Density -->
+  <div class="input-row">
+    <div class="label">Density ของสาร</div>
+    <div class="inline-box">
+      <input type="number" step="0.001" id="density" oninput="calc()" placeholder="เช่น 1.12" />
+      <span style="font-size:15px;color:#555;">kg/L</span>
+    </div>
+  </div>
+
+  <!-- Chemical volume -->
+  <div class="input-row">
+    <div class="label">ปริมาณสารเคมีที่ผสมในถัง</div>
+    <div class="inline-box">
+      <input type="number" id="chemVol" oninput="calc()" placeholder="เช่น 1.5" />
+      <select id="chemUnit" class="unit" onchange="calc()">
+        <option value="kg">kg</option>
+        <option value="L">L</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Tank volume -->
+  <div class="input-row">
+    <div class="label">ปริมาตรถังผสม</div>
+    <div class="inline-box">
+      <input type="number" id="tankVol" oninput="calc()" placeholder="เช่น 100" />
+      <span style="font-size:15px;color:#555;">L</span>
+    </div>
+  </div>
+
+  <!-- Pump max -->
+  <div class="input-row">
+    <div class="label">ปั๊มเคมีกำลังสูงสุด</div>
+    <div class="inline-box">
+      <input type="number" id="pumpMax" oninput="calc()" placeholder="เช่น 2.4" />
+      <span style="font-size:15px;color:#555;">L/h</span>
+    </div>
+  </div>
+
+  <div class="result" id="result"></div>
+</div>
+
+<script>
+function calc() {
+  let ppm      = parseFloat(ppmInput.value);
+  let flow     = parseFloat(flowInput.value);
+  let density  = parseFloat(densityInput.value);
+  let chemVol  = parseFloat(chemVolInput.value);
+  let tankVol  = parseFloat(tankVolInput.value);
+  let pumpMax  = parseFloat(pumpMaxInput.value);
+  let unit     = flowUnit.value;
+  let chemUnit = chemUnitSelect.value;
+
+  if ([ppm, flow, density, chemVol, tankVol, pumpMax].some(v => isNaN(v))) {
+    result.innerHTML = "";
+    return;
+  }
+
+  // แปลงสารเคมีเป็น L
+  let chemL = (chemUnit === "kg") ? chemVol / density : chemVol;
+
+  // น้ำ L/h
+  let waterLh = (unit === "Lmin") ? flow * 60 : flow * 1000;
+
+  // ปริมาณสารบริสุทธิ์ที่ต้องใช้
+  let pureChemLh = (ppm * waterLh) / 1e6;
+
+  // ความเข้มข้นสารในถัง
+  let stockConc = chemL / tankVol;
+
+  // Feed rate ที่ต้องป้อน
+  let feedRate = pureChemLh / stockConc;
+
+  // ===============================
+  //   คำนวณ Speed/Stroke แบบทีละ 10%
+  // ===============================
+  let options = [];
+
+  for (let s = 10; s <= 100; s += 10) {
+    for (let k = 10; k <= 100; k += 10) {
+      let f = pumpMax * (s/100) * (k/100);
+      let err = Math.abs(f - feedRate);
+      options.push({s, k, f, err});
+    }
+  }
+
+  let under = options.filter(o => o.f < feedRate);
+  let over  = options.filter(o => o.f >= feedRate);
+
+  let bestSpeed, bestStroke, bestFlow;
+
+  if (under.length > 0) {
+    under.sort((a,b)=>b.f - a.f); // จ่ายต่ำกว่า → เอาค่าสูงสุดใน under
+    bestSpeed  = under[0].s;
+    bestStroke = under[0].k;
+    bestFlow   = under[0].f;
+  } else {
+    over.sort((a,b)=>a.err - b.err); // ถ้าจ่ายถึง → เอาที่ใกล้ที่สุด
+    bestSpeed  = over[0].s;
+    bestStroke = over[0].k;
+    bestFlow   = over[0].f;
+  }
+
+  // แสดงผล
+  result.innerHTML = `
+    ต้องป้อนสารเคมี <span style="color:#e53935">${feedRate.toFixed(3)} L/h</span><br><br>
+
+    🔧 <b>ตั้งปั๊มแนะนำ </b><br>
+    Speed = <b style="color:#1565c0">${bestSpeed}%</b><br>
+    Stroke = <b style="color:#1565c0">${bestStroke}%</b><br>
+    <span style="font-size:14px;color:#444;">
+      (อัตราจ่ายจริง ≈ ${bestFlow.toFixed(3)} L/h)
+    </span><br><br>
+
+    <small style="color:#555;">
+      Chemical ที่ใช้ผสมในถัง = ${chemL.toFixed(3)} L
+    </small>
+  `;
+}
+
+// Element mapping
+const ppmInput = document.getElementById("ppm");
+const flowInput = document.getElementById("flow");
+const densityInput = document.getElementById("density");
+const chemVolInput = document.getElementById("chemVol");
+const chemUnitSelect = document.getElementById("chemUnit");
+const tankVolInput = document.getElementById("tankVol");
+const pumpMaxInput = document.getElementById("pumpMax");
+const flowUnit = document.getElementById("flowUnit");
+const result = document.getElementById("result");
+</script>
+
+</body>
+</html>
