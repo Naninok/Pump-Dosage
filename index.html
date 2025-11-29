@@ -61,17 +61,6 @@
     font-size: 15px;
   }
 
-  button {
-    width: 100%;
-    padding: 14px;
-    background: linear-gradient(90deg,#e53935,#d32f2f);
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-size: 17px;
-    margin-top: 10px;
-  }
-
   .result {
     margin-top: 18px;
     font-size: 17px;
@@ -84,7 +73,7 @@
 
 <body>
 <div class="card">
-  <h2>คำนวณอัตราป้อนสารเคมี</h2>
+  <h2>Chemical Dosing Calculator</h2>
 
   <!-- ppm -->
   <div class="input-row">
@@ -108,7 +97,7 @@
   <div class="input-row">
     <div class="label">Density ของสาร</div>
     <div class="inline-box">
-      <input type="number" step="0.001" id="density" oninput="calc()" placeholder="เช่น 1.12" />
+      <input type="number" step="0.001" id="density" oninput="calc()" placeholder="เช่น 1.27" />
       <span style="font-size:15px;color:#555;">kg/L</span>
     </div>
   </div>
@@ -162,24 +151,22 @@ function calc() {
     return;
   }
 
-  // แปลงสารเคมีเป็น L
-  let chemL = (chemUnit === "kg") ? chemVol / density : chemVol;
+  // 1) แปลงเป็น kg
+  let chemKg = (chemUnit === "kg") ? chemVol : chemVol * density;
 
-  // น้ำ L/h
+  // 2) Stock concentration = kg/L
+  let stockConc = chemKg / tankVol;
+
+  // 3) น้ำ L/h
   let waterLh = (unit === "Lmin") ? flow * 60 : flow * 1000;
 
-  // ปริมาณสารบริสุทธิ์ที่ต้องใช้
-  let pureChemLh = (ppm * waterLh) / 1e6;
+  // 4) ต้องการสารบริสุทธิ์ kg/h
+  let pureChemKgH = ppm * waterLh / 1e6;
 
-  // ความเข้มข้นสารในถัง
-  let stockConc = chemL / tankVol;
+  // 5) ปริมาณสารละลายที่ต้องป้อน (L/h)
+  let feedRate = pureChemKgH / stockConc;
 
-  // Feed rate ที่ต้องป้อน
-  let feedRate = pureChemLh / stockConc;
-
-  // ===============================
-  //   คำนวณ Speed/Stroke แบบทีละ 10%
-  // ===============================
+  // คำนวณ Speed/Stroke
   let options = [];
 
   for (let s = 10; s <= 100; s += 10) {
@@ -193,33 +180,28 @@ function calc() {
   let under = options.filter(o => o.f < feedRate);
   let over  = options.filter(o => o.f >= feedRate);
 
-  let bestSpeed, bestStroke, bestFlow;
+  let best;
 
   if (under.length > 0) {
-    under.sort((a,b)=>b.f - a.f); // จ่ายต่ำกว่า → เอาค่าสูงสุดใน under
-    bestSpeed  = under[0].s;
-    bestStroke = under[0].k;
-    bestFlow   = under[0].f;
+    under.sort((a,b)=>b.f - a.f);
+    best = under[0];
   } else {
-    over.sort((a,b)=>a.err - b.err); // ถ้าจ่ายถึง → เอาที่ใกล้ที่สุด
-    bestSpeed  = over[0].s;
-    bestStroke = over[0].k;
-    bestFlow   = over[0].f;
+    over.sort((a,b)=>a.err - b.err);
+    best = over[0];
   }
 
-  // แสดงผล
   result.innerHTML = `
     ต้องป้อนสารเคมี <span style="color:#e53935">${feedRate.toFixed(3)} L/h</span><br><br>
 
-    🔧 <b>ตั้งปั๊มแนะนำ </b><br>
-    Speed = <b style="color:#1565c0">${bestSpeed}%</b><br>
-    Stroke = <b style="color:#1565c0">${bestStroke}%</b><br>
+    🔧 <b>ตั้งปั๊มแนะนำ</b><br>
+    Speed = <b style="color:#1565c0">${best.s}%</b><br>
+    Stroke = <b style="color:#1565c0">${best.k}%</b><br>
     <span style="font-size:14px;color:#444;">
-      (อัตราจ่ายจริง ≈ ${bestFlow.toFixed(3)} L/h)
+      (อัตราจ่ายจริง ≈ ${best.f.toFixed(3)} L/h)
     </span><br><br>
 
     <small style="color:#555;">
-      Chemical ที่ใช้ผสมในถัง = ${chemL.toFixed(3)} L
+      Chemical mass in tank = ${chemKg.toFixed(3)} kg
     </small>
   `;
 }
